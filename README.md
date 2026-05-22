@@ -1,36 +1,75 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# AI Primitives Playground
 
-## Getting Started
+## What this project demonstrates
 
-First, run the development server:
+- Streaming chat responses
+- Structured JSON output
+- Schema validation with Zod
+- Tool calling and tool selection
+- Approval before side effects
+- Error and retry states
+- Loading and partial response states
+
+## Modules
+
+### Brief Parser
+
+Paste a product description or business idea. The model returns structured JSON with:
+
+- `persona`: target user description
+- `pain_points`: array of pain points
+- `risks`: array of risks
+- `next_questions`: array of follow-up questions
+
+The output is streamed in real-time and validated against a Zod schema before being shown as successful.
+
+### AI Form Assistant
+
+Describe your project and let AI suggest values for a structured form. The flow is:
+
+1. User describes the project
+2. AI suggests form values
+3. App shows suggested values in a preview
+4. User approves or rejects
+5. Only after approval values are applied to the form
+6. User can save approved values to localStorage
+
+### Tool Calling Playground
+
+See how the model chooses a tool based on user input. Available tools:
+
+- `summarize_text`: Summarize a piece of text
+- `classify_priority`: Classify priority as low, medium, or high
+- `draft_follow_up_questions`: Generate follow-up questions from context
+
+The tool call is visible before execution. User must approve before the tool runs.
+
+## What I learned
+
+- Streaming changes UI significantly — users see progress immediately, but you need to handle partial/invalid data gracefully.
+- Structured output needs validation because models can return malformed JSON or miss required fields.
+- Tool calls should be visible to the user so they understand what the model is trying to do.
+- Approval is important before side effects because model output is not trusted data.
+- Common errors during development: invalid JSON from model, schema mismatches, missing environment variables, and stream interruption.
+
+## How to run
 
 ```bash
+# Install dependencies
+npm install
+
+# Set up environment variables
+cp .env.local.example .env.local
+# Edit .env.local and add your Timeweb Cloud AI API key
+
+# Start development server
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Open [http://localhost:3000](http://localhost:3000) to see the playground.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## Environment variables
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
-
-## Learn More
-
-To learn more about Next.js, take a look at the following resources:
-
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
-
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
-
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+| Variable | Description |
+|----------|-------------|
+| `AI_API_KEY` | Your Timeweb Cloud AI API key (server-side only) |
