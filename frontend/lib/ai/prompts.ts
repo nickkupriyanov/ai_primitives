@@ -1,1 +1,0 @@
-export const toolPlaygroundPrompt = `You are a helpful assistant. Based on the user's input, decide which tool to call. You must use the provided tools. Do not respond with free-form text unless no tool is appropriate.`;

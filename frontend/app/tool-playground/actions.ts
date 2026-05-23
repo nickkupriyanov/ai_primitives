@@ -1,56 +1,65 @@
 "use server";
 
-import { openai } from "@/lib/ai/client";
-import { AI_CONFIG } from "@/lib/ai/config";
-import { toolPlaygroundPrompt } from "@/lib/ai/prompts";
-import { toolDefinitions, executeTool } from "@/lib/ai/tools";
+const BACKEND_URL =
+  process.env.NEXT_PUBLIC_BACKEND_URL?.replace(/\/$/, "") ??
+  "http://127.0.0.1:8000";
 
-interface ToolCallRequest {
+interface ToolPlanResult {
   toolName: string;
   args: unknown;
+  requiresApproval: boolean;
 }
 
-export async function requestToolCall(input: string): Promise<ToolCallRequest> {
-  try {
-    const response = await openai.chat.completions.create({
-      model: AI_CONFIG.model,
-      messages: [
-        { role: "system", content: toolPlaygroundPrompt },
-        { role: "user", content: input },
-      ],
-      tools: toolDefinitions,
-      tool_choice: "auto",
-    });
-
-    const message = response.choices[0]?.message;
-    const toolCalls = message?.tool_calls;
-
-    if (!toolCalls || toolCalls.length === 0) {
-      throw new Error("The model did not choose a tool. Try a more specific prompt.");
+function extractErrorMessage(data: unknown, status: number): string {
+  if (data && typeof data === "object" && "error" in data) {
+    const err = (data as { error?: { code?: string; message?: string } }).error;
+    if (err?.message) {
+      const prefix = err.code ? `[${err.code}] ` : "";
+      return `${prefix}${err.message}`;
     }
-
-    const call = toolCalls[0];
-    const fn = (call as { function: { name: string; arguments: string } }).function;
-    let args: unknown;
-    try {
-      args = JSON.parse(fn.arguments);
-    } catch {
-      throw new Error("The model returned invalid tool arguments.");
-    }
-
-    return { toolName: fn.name, args };
-  } catch (error) {
-    const message = error instanceof Error ? error.message : "Unknown error";
-    throw new Error(`Tool request failed: ${message}`);
   }
+  return `Request failed with status ${status}`;
 }
 
-export async function executeApprovedTool(toolName: string, args: unknown) {
-  try {
-    const result = await executeTool(toolName, args);
-    return result;
-  } catch (error) {
-    const message = error instanceof Error ? error.message : "Unknown error";
-    throw new Error(`Tool execution failed: ${message}`);
+export async function requestToolCall(input: string): Promise<ToolPlanResult> {
+  const res = await fetch(`${BACKEND_URL}/tools/plan`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ input }),
+  });
+
+  if (!res.ok) {
+    const data = await res.json().catch(() => ({}));
+    throw new Error(extractErrorMessage(data, res.status));
   }
+
+  const json = await res.json();
+  return {
+    toolName: json.tool_name,
+    args: json.arguments,
+    requiresApproval: json.requires_approval,
+  };
+}
+
+export async function executeApprovedTool(
+  toolName: string,
+  args: unknown,
+): Promise<unknown> {
+  const res = await fetch(`${BACKEND_URL}/tools/execute`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      tool_name: toolName,
+      arguments: args,
+      approved: true,
+    }),
+  });
+
+  if (!res.ok) {
+    const data = await res.json().catch(() => ({}));
+    throw new Error(extractErrorMessage(data, res.status));
+  }
+
+  const json = await res.json();
+  return json.result;
 }

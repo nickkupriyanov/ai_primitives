@@ -75,6 +75,18 @@ class ToolExecuteResponse(BaseModel):
     meta: Meta
 
 
+class ToolPlanRequest(BaseModel):
+    input: str = Field(..., min_length=1, max_length=10_000)
+
+
+class ToolPlanResponse(BaseModel):
+    tool_name: str
+    arguments: dict[str, Any]
+    requires_approval: bool
+    status: Literal["planned"] = "planned"
+    meta: Meta
+
+
 class HealthResponse(BaseModel):
     status: Literal["ok"]
     service: str

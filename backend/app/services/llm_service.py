@@ -156,26 +156,62 @@ class LLMService:
             raise AppError("LLM_PROVIDER_ERROR", "LLM returned non-object JSON.", 502)
         return parsed
 
-    async def _complete_text(
+    async def plan_tool(
         self,
-        use_case: str,
-        messages: list[dict[str, str]],
-        response_format: dict[str, str] | None = None,
-    ) -> str:
+        user_input: str,
+        tools: list[dict[str, Any]],
+    ) -> dict[str, Any]:
+        SYSTEM_PROMPT = (
+            "You are a helpful assistant. Based on the user's input, decide which "
+            "tool to call. You must use the provided tools. Do not respond with "
+            "free-form text unless no tool is appropriate."
+        )
+        messages: list[dict[str, str]] = [
+            {"role": "system", "content": SYSTEM_PROMPT},
+            {"role": "user", "content": user_input},
+        ]
+
+        response = await self._call_chat_completion(
+            "tool_plan",
+            messages=messages,
+            tools=tools,
+            tool_choice="auto",
+        )
+
+        message = response.choices[0].message
+        tool_calls = getattr(message, "tool_calls", None)
+
+        if not tool_calls:
+            raise AppError(
+                "NO_TOOL_SELECTED",
+                "The model did not select a tool. Try a more specific prompt.",
+                422,
+            )
+
+        call = tool_calls[0]
+        fn_name: str = call.function.name
+        try:
+            fn_args: dict[str, Any] = json.loads(call.function.arguments)
+        except json.JSONDecodeError as exc:
+            raise AppError(
+                "LLM_PROVIDER_ERROR",
+                "The model returned invalid tool arguments.",
+                502,
+            ) from exc
+
+        return {"tool_name": fn_name, "arguments": fn_args}
+
+    async def _call_chat_completion(self, use_case: str, **kwargs: Any) -> Any:
         client = self._get_client()
         attempts = self.settings.llm_max_retries
         last_error: Exception | None = None
 
+        kwargs.setdefault("model", self.settings.openai_model)
+        kwargs.setdefault("timeout", self.settings.llm_timeout_seconds)
+
         for attempt in range(1, attempts + 1):
             started = time.perf_counter()
             try:
-                kwargs: dict[str, Any] = {
-                    "model": self.settings.openai_model,
-                    "messages": messages,
-                    "timeout": self.settings.llm_timeout_seconds,
-                }
-                if response_format:
-                    kwargs["response_format"] = response_format
                 response = await client.chat.completions.create(**kwargs)
                 latency_ms = int((time.perf_counter() - started) * 1000)
                 logger.info(
@@ -188,8 +224,8 @@ class LLMService:
                         "success": True,
                     },
                 )
-                return response.choices[0].message.content or ""
-            except Exception as exc:  # SDK exceptions differ by provider/base_url.
+                return response
+            except Exception as exc:
                 last_error = exc
                 logger.warning(
                     "llm_call_failed",
@@ -208,3 +244,15 @@ class LLMService:
         if last_error and "timeout" in last_error.__class__.__name__.lower():
             raise AppError("LLM_TIMEOUT", "LLM request timed out.", 504)
         raise AppError("LLM_PROVIDER_ERROR", "LLM provider request failed.", 502)
+
+    async def _complete_text(
+        self,
+        use_case: str,
+        messages: list[dict[str, str]],
+        response_format: dict[str, str] | None = None,
+    ) -> str:
+        extra: dict[str, Any] = {}
+        if response_format:
+            extra["response_format"] = response_format
+        response = await self._call_chat_completion(use_case, messages=messages, **extra)
+        return response.choices[0].message.content or ""

@@ -5,7 +5,8 @@ import { requestToolCall, executeApprovedTool } from "./actions";
 import { ToolCallStatus } from "@/types/ai";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardHeader, CardTitle } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
 import { ToolCallPreview } from "@/components/ai/ToolCallPreview";
 import { ApprovalCard } from "@/components/ai/ApprovalCard";
 import { JsonPreview } from "@/components/ai/JsonPreview";
@@ -15,7 +16,11 @@ import { Loader2, Send, XCircle, CheckCircle2 } from "lucide-react";
 
 export default function ToolPlaygroundPage() {
   const [inputText, setInputText] = useState("");
-  const [toolCall, setToolCall] = useState<{ name: string; args: unknown } | null>(null);
+  const [toolCall, setToolCall] = useState<{
+    name: string;
+    args: unknown;
+    requiresApproval: boolean;
+  } | null>(null);
   const [toolResult, setToolResult] = useState<unknown | null>(null);
   const [status, setStatus] = useState<ToolCallStatus>("idle");
   const [error, setError] = useState<string | null>(null);
@@ -30,7 +35,11 @@ export default function ToolPlaygroundPage() {
 
     try {
       const result = await requestToolCall(inputText);
-      setToolCall({ name: result.toolName, args: result.args });
+      setToolCall({
+        name: result.toolName,
+        args: result.args,
+        requiresApproval: result.requiresApproval,
+      });
       setStatus("pending_approval");
     } catch (err) {
       const message = err instanceof Error ? err.message : "Failed to request tool";
@@ -103,10 +112,24 @@ export default function ToolPlaygroundPage() {
       {status === "pending_approval" && toolCall && (
         <div className="mt-6">
           <ApprovalCard
-            title={`Approve tool: ${toolCall.name}`}
+            title={`Review tool call: ${toolCall.name}`}
             onApprove={handleExecute}
             onCancel={handleCancel}
           >
+            <div className="mb-3 flex items-center gap-2">
+              <Badge
+                variant={toolCall.requiresApproval ? "destructive" : "secondary"}
+              >
+                {toolCall.requiresApproval
+                  ? "Approval required"
+                  : "Safe tool"}
+              </Badge>
+              <span className="text-sm text-muted-foreground">
+                {toolCall.requiresApproval
+                  ? "This tool has side effects and needs confirmation."
+                  : "Preview before execution; no side effects expected."}
+              </span>
+            </div>
             <ToolCallPreview
               toolName={toolCall.name}
               args={toolCall.args as Record<string, unknown>}

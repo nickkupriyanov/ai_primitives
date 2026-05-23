@@ -41,6 +41,82 @@ class ToolService:
             "save_note": ToolDefinition(side_effect=True, handler_name="_save_note"),
         }
 
+    def get_openai_tool_definitions(self) -> list[dict[str, Any]]:
+        return [
+            {
+                "type": "function",
+                "function": {
+                    "name": "summarize_text",
+                    "description": "Summarize a piece of text into a shorter version.",
+                    "parameters": {
+                        "type": "object",
+                        "properties": {
+                            "text": {
+                                "type": "string",
+                                "description": "The text to summarize",
+                            }
+                        },
+                        "required": ["text"],
+                    },
+                },
+            },
+            {
+                "type": "function",
+                "function": {
+                    "name": "classify_priority",
+                    "description": "Classify the priority level of a given text or task description.",
+                    "parameters": {
+                        "type": "object",
+                        "properties": {
+                            "text": {
+                                "type": "string",
+                                "description": "The text to classify",
+                            }
+                        },
+                        "required": ["text"],
+                    },
+                },
+            },
+            {
+                "type": "function",
+                "function": {
+                    "name": "extract_action_items",
+                    "description": "Extract action items and todos from a given text.",
+                    "parameters": {
+                        "type": "object",
+                        "properties": {
+                            "text": {
+                                "type": "string",
+                                "description": "The text to extract action items from",
+                            }
+                        },
+                        "required": ["text"],
+                    },
+                },
+            },
+            {
+                "type": "function",
+                "function": {
+                    "name": "save_note",
+                    "description": "Save a note with a title and content. Requires user approval.",
+                    "parameters": {
+                        "type": "object",
+                        "properties": {
+                            "title": {
+                                "type": "string",
+                                "description": "The note title",
+                            },
+                            "content": {
+                                "type": "string",
+                                "description": "The note content",
+                            },
+                        },
+                        "required": ["title", "content"],
+                    },
+                },
+            },
+        ]
+
     async def execute_tool(
         self,
         tool_name: str,
