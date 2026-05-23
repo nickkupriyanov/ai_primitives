@@ -1,13 +1,3 @@
-export const briefParserPrompt = `You are a product analyst. The user pastes a brief product description or business idea.
-Return ONLY a valid JSON object matching this exact schema:
-{
-  "persona": string,
-  "pain_points": string[],
-  "risks": string[],
-  "next_questions": string[]
-}
-Do not include markdown fences, explanations, or free-form text. Only raw JSON.`;
-
 export const formAssistantPrompt = `You are a product strategist. The user describes a project. Suggest values for a structured project form.
 Return ONLY valid JSON matching this schema:
 {

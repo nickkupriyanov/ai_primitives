@@ -7,15 +7,37 @@ import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
-import { StreamingMessage } from "@/components/ai/StreamingMessage";
 import { JsonPreview } from "@/components/ai/JsonPreview";
 import { ErrorState } from "@/components/ai/ErrorState";
 import { RetryButton } from "@/components/ai/RetryButton";
-import { Loader2, Send, CheckCircle2, User, AlertTriangle, HelpCircle } from "lucide-react";
+import {
+  Loader2,
+  Send,
+  CheckCircle2,
+  Tags,
+  AlertTriangle,
+  HelpCircle,
+} from "lucide-react";
+
+const backendUrl =
+  process.env.NEXT_PUBLIC_BACKEND_URL?.replace(/\/$/, "") ??
+  "http://localhost:8000";
+
+function getApiErrorMessage(data: unknown, status: number) {
+  if (data && typeof data === "object" && "error" in data) {
+    const { error } = data as {
+      error?: string | { message?: string };
+    };
+
+    if (typeof error === "string") return error;
+    if (error?.message) return error.message;
+  }
+
+  return `Request failed with status ${status}`;
+}
 
 export default function BriefParserPage() {
   const [briefText, setBriefText] = useState("");
-  const [streamedText, setStreamedText] = useState("");
   const [status, setStatus] = useState<RequestStatus>("idle");
   const [parsedResult, setParsedResult] = useState<BriefOutput | null>(null);
   const [validationError, setValidationError] = useState<string | null>(null);
@@ -24,38 +46,23 @@ export default function BriefParserPage() {
     if (!briefText.trim()) return;
 
     setStatus("loading");
-    setStreamedText("");
     setParsedResult(null);
     setValidationError(null);
 
     try {
-      const res = await fetch("/api/brief-parser", {
+      const res = await fetch(`${backendUrl}/analyze`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ briefText }),
+        credentials: 'include',
+        body: JSON.stringify({ text: briefText, language: "ru" }),
       });
 
       if (!res.ok) {
         const data = await res.json().catch(() => ({}));
-        throw new Error(data.error || `Request failed with status ${res.status}`);
+        throw new Error(getApiErrorMessage(data, res.status));
       }
 
-      const reader = res.body?.getReader();
-      if (!reader) throw new Error("No response body");
-
-      const decoder = new TextDecoder();
-      let fullText = "";
-
-      setStatus("streaming");
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-        fullText += decoder.decode(value, { stream: true });
-        setStreamedText(fullText);
-      }
-
-      // Validate after stream completes
-      const json = JSON.parse(fullText);
+      const json = await res.json();
       const validated = briefOutputSchema.parse(json);
       setParsedResult(validated);
       setStatus("success");
@@ -86,20 +93,20 @@ export default function BriefParserPage() {
           value={briefText}
           onChange={(e) => setBriefText(e.target.value)}
           rows={6}
-          disabled={status === "loading" || status === "streaming"}
+          disabled={status === "loading"}
         />
 
         <div className="flex items-center gap-2">
           <Button
             onClick={handleSubmit}
-            disabled={!briefText.trim() || status === "loading" || status === "streaming"}
+            disabled={!briefText.trim() || status === "loading"}
           >
-            {status === "loading" || status === "streaming" ? (
+            {status === "loading" ? (
               <Loader2 className="mr-2 h-4 w-4 animate-spin" />
             ) : (
               <Send className="mr-2 h-4 w-4" />
             )}
-            {status === "loading" ? "Analyzing..." : status === "streaming" ? "Streaming..." : "Parse Brief"}
+            {status === "loading" ? "Analyzing..." : "Parse Brief"}
           </Button>
 
           {(status === "error" || status === "success") && (
@@ -107,19 +114,6 @@ export default function BriefParserPage() {
           )}
         </div>
       </div>
-
-      {status === "streaming" && (
-        <div className="mt-6">
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-sm font-medium">Streaming response</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <StreamingMessage text={streamedText} isStreaming={true} />
-            </CardContent>
-          </Card>
-        </div>
-      )}
 
       {status === "error" && (
         <div className="mt-6 space-y-4">
@@ -129,12 +123,6 @@ export default function BriefParserPage() {
             }
             onRetry={handleRetry}
           />
-          {streamedText && (
-            <div>
-              <p className="mb-2 text-sm text-muted-foreground">Raw model output:</p>
-              <JsonPreview data={streamedText} />
-            </div>
-          )}
         </div>
       )}
 
@@ -161,12 +149,16 @@ export default function BriefParserPage() {
               <Card>
                 <CardHeader className="pb-2">
                   <div className="flex items-center gap-2">
-                    <User className="h-4 w-4 text-primary" />
-                    <CardTitle className="text-sm">Persona</CardTitle>
+                    <Tags className="h-4 w-4 text-primary" />
+                    <CardTitle className="text-sm">Topics</CardTitle>
                   </div>
                 </CardHeader>
                 <CardContent>
-                  <p className="text-sm">{parsedResult.persona}</p>
+                  <ul className="list-disc pl-4 text-sm space-y-1">
+                    {parsedResult.topics.map((topic, i) => (
+                      <li key={i}>{topic}</li>
+                    ))}
+                  </ul>
                 </CardContent>
               </Card>
 

@@ -52,6 +52,7 @@ class LLMService:
                         "You are an AI product analyst. Analyze the user's text "
                         "and return only JSON with topics, pain_points, risks, "
                         "and next_questions. Be concise and practical."
+                        "Отвечай на русском"
                     ),
                 },
                 {"role": "user", "content": f"Language: {language}\n\nText:\n{text}"},
