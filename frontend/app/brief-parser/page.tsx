@@ -21,7 +21,7 @@ import {
 
 const backendUrl =
   process.env.NEXT_PUBLIC_BACKEND_URL?.replace(/\/$/, "") ??
-  "http://localhost:8000";
+  "http://127.0.0.1:8000";
 
 function getApiErrorMessage(data: unknown, status: number) {
   if (data && typeof data === "object" && "error" in data) {

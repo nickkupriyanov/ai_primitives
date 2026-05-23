@@ -9,12 +9,14 @@ import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
 import { Label } from "@/components/ui/label";
-import { StreamingMessage } from "@/components/ai/StreamingMessage";
-import { JsonPreview } from "@/components/ai/JsonPreview";
 import { ApprovalCard } from "@/components/ai/ApprovalCard";
 import { ErrorState } from "@/components/ai/ErrorState";
 import { RetryButton } from "@/components/ai/RetryButton";
-import { Loader2, Send, Save, Plus, X, Lightbulb } from "lucide-react";
+import { Loader2, Save, Plus, X, Lightbulb } from "lucide-react";
+
+const backendUrl =
+  process.env.NEXT_PUBLIC_BACKEND_URL?.replace(/\/$/, "") ??
+  "http://127.0.0.1:8000";
 
 const emptyForm: FormValues = {
   project_name: "",
@@ -27,45 +29,63 @@ const emptyForm: FormValues = {
 
 function isEmptyValue(value: unknown): boolean {
   if (typeof value === "string") return value.trim() === "";
-  if (Array.isArray(value)) return value.length === 0 || value.every((v) => typeof v === "string" && v.trim() === "");
+  if (Array.isArray(value)) {
+    return (
+      value.length === 0 ||
+      value.every((v) => typeof v === "string" && v.trim() === "")
+    );
+  }
   return false;
+}
+
+function getApiErrorMessage(data: unknown, status: number) {
+  if (data && typeof data === "object" && "error" in data) {
+    const { error } = data as {
+      error?: string | { message?: string };
+    };
+
+    if (typeof error === "string") return error;
+    if (error?.message) return error.message;
+  }
+
+  return `Request failed with status ${status}`;
 }
 
 export default function FormAssistantPage() {
   const [context, setContext] = useState("");
   const [currentValues, setCurrentValues] = useState<FormValues>(emptyForm);
   const [suggestedValues, setSuggestedValues] = useState<FormValues | null>(null);
-  const [suggestionText, setSuggestionText] = useState("");
   const [status, setStatus] = useState<RequestStatus>("idle");
   const [error, setError] = useState<string | null>(null);
   const [showApproval, setShowApproval] = useState(false);
   const [savedMessage, setSavedMessage] = useState<string | null>(null);
 
   useEffect(() => {
-    try {
-      const saved = localStorage.getItem("form-assistant-values");
-      if (saved) {
-        const parsed = JSON.parse(saved);
-        const validated = formValuesSchema.partial().parse(parsed);
-        setCurrentValues((prev) => ({ ...prev, ...validated }));
+    queueMicrotask(() => {
+      try {
+        const saved = localStorage.getItem("form-assistant-values");
+        if (saved) {
+          const parsed = JSON.parse(saved);
+          const validated = formValuesSchema.partial().parse(parsed);
+          setCurrentValues((prev) => ({ ...prev, ...validated }));
+        }
+      } catch {
+        // ignore invalid saved data
       }
-    } catch {
-      // ignore invalid saved data
-    }
+    });
   }, []);
 
   const handleSubmit = useCallback(async () => {
     if (!context.trim()) return;
 
     setStatus("loading");
-    setSuggestionText("");
     setSuggestedValues(null);
     setError(null);
     setShowApproval(false);
     setSavedMessage(null);
 
     try {
-      const res = await fetch("/api/form-assistant", {
+      const res = await fetch(`${backendUrl}/form-assistant`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ context }),
@@ -73,24 +93,10 @@ export default function FormAssistantPage() {
 
       if (!res.ok) {
         const data = await res.json().catch(() => ({}));
-        throw new Error(data.error || `Request failed with status ${res.status}`);
+        throw new Error(getApiErrorMessage(data, res.status));
       }
 
-      const reader = res.body?.getReader();
-      if (!reader) throw new Error("No response body");
-
-      const decoder = new TextDecoder();
-      let fullText = "";
-
-      setStatus("streaming");
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-        fullText += decoder.decode(value, { stream: true });
-        setSuggestionText(fullText);
-      }
-
-      const json = JSON.parse(fullText);
+      const json = await res.json();
       const validated = formValuesSchema.parse(json);
       setSuggestedValues(validated);
       setShowApproval(true);
@@ -119,12 +125,18 @@ export default function FormAssistantPage() {
     setTimeout(() => setSavedMessage(null), 3000);
   }, [currentValues]);
 
-  const updateField = useCallback(<K extends keyof FormValues>(field: K, value: FormValues[K]) => {
-    setCurrentValues((prev) => ({ ...prev, [field]: value }));
-  }, []);
+  const updateField = useCallback(
+    <K extends keyof FormValues>(field: K, value: FormValues[K]) => {
+      setCurrentValues((prev) => ({ ...prev, [field]: value }));
+    },
+    []
+  );
 
   const addRisk = useCallback(() => {
-    setCurrentValues((prev) => ({ ...prev, main_risks: [...prev.main_risks, ""] }));
+    setCurrentValues((prev) => ({
+      ...prev,
+      main_risks: [...prev.main_risks, ""],
+    }));
   }, []);
 
   const removeRisk = useCallback((index: number) => {
@@ -161,19 +173,19 @@ export default function FormAssistantPage() {
               value={context}
               onChange={(e) => setContext(e.target.value)}
               rows={4}
-              disabled={status === "loading" || status === "streaming"}
+              disabled={status === "loading"}
             />
             <div className="flex items-center gap-2">
               <Button
                 onClick={handleSubmit}
-                disabled={!context.trim() || status === "loading" || status === "streaming"}
+                disabled={!context.trim() || status === "loading"}
               >
-                {status === "loading" || status === "streaming" ? (
+                {status === "loading" ? (
                   <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                 ) : (
                   <Lightbulb className="mr-2 h-4 w-4" />
                 )}
-                {status === "loading" ? "Thinking..." : status === "streaming" ? "Streaming..." : "Help me fill this form"}
+                {status === "loading" ? "Thinking..." : "Help me fill this form"}
               </Button>
               {(status === "error" || status === "success") && !showApproval && (
                 <RetryButton onRetry={handleSubmit} />
@@ -182,29 +194,12 @@ export default function FormAssistantPage() {
           </CardContent>
         </Card>
 
-        {status === "streaming" && (
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-sm font-medium">Streaming suggestion</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <StreamingMessage text={suggestionText} isStreaming={true} />
-            </CardContent>
-          </Card>
-        )}
-
         {status === "error" && (
           <div className="space-y-4">
             <ErrorState
               message={error ?? "The model returned invalid output. Please retry or simplify your input."}
               onRetry={handleSubmit}
             />
-            {suggestionText && (
-              <div>
-                <p className="mb-2 text-sm text-muted-foreground">Raw model output:</p>
-                <JsonPreview data={suggestionText} />
-              </div>
-            )}
           </div>
         )}
 

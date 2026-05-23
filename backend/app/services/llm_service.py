@@ -6,10 +6,24 @@ from typing import Any
 from app.config import Settings, get_settings
 from app.core.errors import AppError
 from app.observability.logging import get_logger
-from app.schemas import AnalyzeResponse, ChatMessage, ChatResponse, Meta
+from app.schemas import (
+    AnalyzeResponse,
+    ChatMessage,
+    ChatResponse,
+    FormAssistantResponse,
+    Meta,
+)
 
 
 logger = get_logger(__name__)
+
+
+def _string_list(value: Any) -> list[str]:
+    if isinstance(value, list):
+        return [str(item) for item in value]
+    if isinstance(value, str):
+        return [value]
+    return []
 
 
 class LLMService:
@@ -60,10 +74,10 @@ class LLMService:
         )
         latency_ms = int((time.perf_counter() - started) * 1000)
         return AnalyzeResponse(
-            topics=list(raw.get("topics", [])),
-            pain_points=list(raw.get("pain_points", [])),
-            risks=list(raw.get("risks", [])),
-            next_questions=list(raw.get("next_questions", [])),
+            topics=_string_list(raw.get("topics", [])),
+            pain_points=_string_list(raw.get("pain_points", [])),
+            risks=_string_list(raw.get("risks", [])),
+            next_questions=_string_list(raw.get("next_questions", [])),
             meta=Meta(model=self.settings.openai_model, latency_ms=latency_ms),
         )
 
@@ -91,6 +105,34 @@ class LLMService:
         return ChatResponse(
             message=ChatMessage(role="assistant", content=content),
             conversation_id=conversation_id,
+            meta=Meta(model=self.settings.openai_model, latency_ms=latency_ms),
+        )
+
+    async def suggest_form_values(self, context: str) -> FormAssistantResponse:
+        started = time.perf_counter()
+        raw = await self._complete_json(
+            use_case="form_assistant",
+            messages=[
+                {
+                    "role": "system",
+                    "content": (
+                        "You are a product strategist. The user describes a project. "
+                        "Return only JSON with project_name, target_user, problem, "
+                        "proposed_solution, main_risks, and success_metric. Keep values "
+                        "concise and practical."
+                    ),
+                },
+                {"role": "user", "content": context},
+            ],
+        )
+        latency_ms = int((time.perf_counter() - started) * 1000)
+        return FormAssistantResponse(
+            project_name=str(raw.get("project_name", "")),
+            target_user=str(raw.get("target_user", "")),
+            problem=str(raw.get("problem", "")),
+            proposed_solution=str(raw.get("proposed_solution", "")),
+            main_risks=_string_list(raw.get("main_risks", [])),
+            success_metric=str(raw.get("success_metric", "")),
             meta=Meta(model=self.settings.openai_model, latency_ms=latency_ms),
         )
 

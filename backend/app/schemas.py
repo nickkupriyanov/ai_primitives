@@ -48,6 +48,20 @@ class ChatResponse(BaseModel):
     meta: Meta
 
 
+class FormAssistantRequest(BaseModel):
+    context: str = Field(..., min_length=10, max_length=10_000)
+
+
+class FormAssistantResponse(BaseModel):
+    project_name: str
+    target_user: str
+    problem: str
+    proposed_solution: str
+    main_risks: list[str]
+    success_metric: str
+    meta: Meta
+
+
 class ToolExecuteRequest(BaseModel):
     tool_name: str = Field(..., min_length=1)
     arguments: dict[str, Any] = Field(default_factory=dict)

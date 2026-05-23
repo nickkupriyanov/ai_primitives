@@ -5,7 +5,7 @@ FastAPI backend for AI workflows, structured analysis, chat, and safe tool execu
 ## Requirements
 
 - Python 3.11+
-- OpenAI-compatible API key for `/analyze` and `/chat`
+- OpenAI-compatible API key for `/analyze`, `/form-assistant`, and `/chat`
 
 ## Setup
 
@@ -46,6 +46,7 @@ curl http://localhost:8000/health
 
 - `GET /health`
 - `POST /analyze`
+- `POST /form-assistant`
 - `POST /chat`
 - `POST /tools/execute`
 

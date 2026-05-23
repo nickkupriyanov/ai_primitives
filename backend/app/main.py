@@ -7,7 +7,7 @@ from app.config import get_settings
 from app.core.errors import AppError, build_error_response
 from app.core.middleware import RequestLoggingMiddleware
 from app.observability.logging import configure_logging
-from app.routes import analyze, chat, health, tools
+from app.routes import analyze, chat, form_assistant, health, tools
 
 
 settings = get_settings()
@@ -33,6 +33,7 @@ app.add_middleware(RequestLoggingMiddleware)
 
 app.include_router(health.router)
 app.include_router(analyze.router)
+app.include_router(form_assistant.router)
 app.include_router(chat.router)
 app.include_router(tools.router)
 
