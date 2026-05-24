@@ -1,0 +1,20 @@
+[
+  {
+    "scenario": "conspectus",
+    "question": "Как работает GIL в Python?",
+    "expected_answer": "GIL (Global Interpreter Lock) — это мьютекс, который защищает доступ к объектам Python. Он предотвращает одновременное выполнение байткода Python несколькими потоками. Из-за GIL CPU-bound программы не получают выигрыша от многопоточности. При этом GIL не мешает asyncio для I/O-bound задач — корутины могут переключаться на await.",
+    "retrieval_issue": "Missing chunk — конспект python-basics.md содержит основное определение GIL, но только один абзац. Конспект python-async.md упоминает GIL лишь косвенно (про asyncio). Retrieval вернул чанки из async-конспекта вместо основного определения."
+  },
+  {
+    "scenario": "compare",
+    "question": "Какие противоречия между документами?",
+    "expected_answer": "1) Type system: Doc A утверждает что Python использует только динамическую типизацию, но Doc B описывает опциональную статическую типизацию через TypeVar и type hints. Doc C отрицает статическую типизацию. 2) Execution model: Doc A и Doc C говорят что Python чисто интерпретируемый, но Doc B описывает компиляцию в байткод и JIT в PyPy.",
+    "retrieval_issue": "Wrong chunk priority — similarity search возвращает чанки с общим описанием Python вместо чанков где напрямую описаны противоречия. Самые релевантные для сравнения чанки имеют более низкий similarity score."
+  },
+  {
+    "scenario": "faq",
+    "question": "Сравни FastAPI и Next.js по маршрутизации и валидации",
+    "expected_answer": "FastAPI использует декораторы (@app.get) и Pydantic для валидации. Next.js App Router использует файловую систему (page.tsx, route.ts) и Zod для валидации. FastAPI валидация встроена в параметры, Next.js требует ручного вызова parse().",
+    "retrieval_issue": "Missing chunk — retrieval вернул только чанки про FastAPI, чанки про Next.js маршрутизацию не попали в top-k. Возможно из-за того что вопрос упоминает FastAPI первым."
+  }
+]
