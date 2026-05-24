@@ -210,13 +210,16 @@ class DocumentService:
             "when you use information from a specific chunk."
         )
 
-        client = self._get_llm()._get_client()
-        response = await client.chat.completions.create(
-            model=settings.openai_model,
-            messages=[{"role": "user", "content": prompt}],
-            temperature=0.3,
-        )
-        answer = response.choices[0].message.content or ""
+        try:
+            client = self._get_llm()._get_client()
+            response = await client.chat.completions.create(
+                model=settings.openai_model,
+                messages=[{"role": "user", "content": prompt}],
+                temperature=0.3,
+            )
+            answer = response.choices[0].message.content or ""
+        except Exception:
+            answer = _fallback_answer(payload.question, results)
 
         citations = [
             CitationOut(
@@ -311,6 +314,28 @@ def _match_failure_case(question: str, actual_answer: str) -> FailureCaseOut | N
                 retrieval_issue=f["retrieval_issue"],
             )
     return None
+
+
+def _fallback_answer(question: str, results: list[dict[str, Any]]) -> str:
+    if not results:
+        return (
+            "Не удалось получить ответ от LLM, и релевантные фрагменты не найдены. "
+            "Попробуйте переформулировать вопрос или загрузить другие документы."
+        )
+
+    excerpts = []
+    for result in results[:3]:
+        text = str(result["text"]).strip().replace("\n", " ")
+        if len(text) > 280:
+            text = f"{text[:277]}..."
+        excerpts.append(
+            f"- {result['filename']} [chunk {result['chunk_position']}]: {text}"
+        )
+
+    return (
+        "LLM сейчас недоступен, поэтому показываю наиболее релевантные фрагменты "
+        f"из документов по вопросу: {question}\n\n" + "\n".join(excerpts)
+    )
 
 
 def _list_scenarios() -> list[str]:

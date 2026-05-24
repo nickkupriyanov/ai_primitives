@@ -180,3 +180,54 @@ def test_demo_scenario_load(mock_add):
     body = response.json()
     assert len(body) == 3
     assert all(s["content_type"] == "text/markdown" for s in body)
+
+
+def test_demo_scenario_loads_without_openai_key(monkeypatch):
+    monkeypatch.setenv("OPENAI_API_KEY", "your_openai_api_key_here")
+    monkeypatch.delenv("AI_API_KEY", raising=False)
+    monkeypatch.delenv("OPENAI_BASE_URL", raising=False)
+    monkeypatch.delenv("BASE_URL", raising=False)
+
+    from app.config import get_settings
+
+    get_settings.cache_clear()
+    reset_chroma()
+    reset_docs()
+
+    response = client.post("/documents/demo/compare")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert len(body) == 3
+    assert all(s["content_type"] == "text/markdown" for s in body)
+
+
+def test_demo_query_returns_fallback_when_llm_unavailable(monkeypatch):
+    monkeypatch.setenv("OPENAI_API_KEY", "your_openai_api_key_here")
+    monkeypatch.delenv("AI_API_KEY", raising=False)
+    monkeypatch.delenv("OPENAI_BASE_URL", raising=False)
+    monkeypatch.delenv("BASE_URL", raising=False)
+
+    from app.config import get_settings
+
+    get_settings.cache_clear()
+    reset_chroma()
+    reset_docs()
+
+    load_response = client.post("/documents/demo/compare")
+    source_ids = [source["id"] for source in load_response.json()]
+
+    with patch("app.services.document_service.LLMService") as mock_llm:
+        mock_llm.return_value._get_client.side_effect = RuntimeError("offline")
+        response = client.post(
+            "/documents/query",
+            json={
+                "question": "Какие противоречия между документами?",
+                "source_ids": source_ids,
+            },
+        )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["answer"]
+    assert body["citations"]
