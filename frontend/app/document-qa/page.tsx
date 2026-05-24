@@ -23,7 +23,7 @@ type Tab = "demo" | "upload";
 
 export default function DocumentQAPage() {
   const [activeTab, setActiveTab] = useState<Tab>("demo");
-  const [sources, setSources] = useState<SourceOut[]>([]);
+  const [customSources, setCustomSources] = useState<SourceOut[]>([]);
   const [status, setStatus] = useState<DocumentQAStatus>("idle");
   const [error, setError] = useState<string | null>(null);
   const [response, setResponse] = useState<QuestionResponse | null>(null);
@@ -32,7 +32,7 @@ export default function DocumentQAPage() {
 
   useEffect(() => {
     queueMicrotask(() => {
-      getSources().then(setSources).catch(() => {});
+      getSources().then(setCustomSources).catch(() => {});
     });
   }, []);
 
@@ -43,8 +43,7 @@ export default function DocumentQAPage() {
     setLoadedScenario(scenarioId);
 
     try {
-      const newSources = await loadDemoScenario(scenarioId);
-      setSources((prev) => [...prev, ...newSources]);
+      await loadDemoScenario(scenarioId);
       setStatus("success");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to load scenario");
@@ -59,7 +58,9 @@ export default function DocumentQAPage() {
     setResponse(null);
 
     try {
-      const sourceIds = sources.length > 0 ? sources.map((s) => s.id) : undefined;
+      const sourceIds = activeTab === "upload" && customSources.length > 0
+        ? customSources.map((s) => s.id)
+        : undefined;
       const result = await queryDocument(question, 5, sourceIds);
       setResponse(result);
       setStatus("success");
@@ -67,7 +68,7 @@ export default function DocumentQAPage() {
       setError(err instanceof Error ? err.message : "Failed to query documents");
       setStatus("error");
     }
-  }, [sources]);
+  }, [customSources, activeTab]);
 
   const handleUpload = useCallback(async (filename: string, content: string, contentType: string) => {
     setStatus("loading");
@@ -75,7 +76,7 @@ export default function DocumentQAPage() {
 
     try {
       const source = await uploadDocument(filename, content, contentType);
-      setSources((prev) => [...prev, source]);
+      setCustomSources((prev) => [...prev, source]);
       setStatus("success");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to upload document");
@@ -87,7 +88,7 @@ export default function DocumentQAPage() {
     setDeletingId(id);
     try {
       await deleteSource(id);
-      setSources((prev) => prev.filter((s) => s.id !== id));
+      setCustomSources((prev) => prev.filter((s) => s.id !== id));
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to delete source");
     } finally {
@@ -148,14 +149,14 @@ export default function DocumentQAPage() {
           <Separator />
 
           <SourcesList
-            sources={sources}
+            sources={customSources}
             onDelete={handleDelete}
             deleting={deletingId}
           />
 
           <QuestionInput
             onSubmit={handleQuestion}
-            disabled={sources.length === 0}
+            disabled={customSources.length === 0}
             loading={status === "loading"}
           />
         </div>
