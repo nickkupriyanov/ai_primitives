@@ -1,3 +1,4 @@
+from datetime import datetime
 from typing import Any, Literal
 
 from pydantic import BaseModel, Field
@@ -91,3 +92,47 @@ class HealthResponse(BaseModel):
     status: Literal["ok"]
     service: str
     version: str
+
+
+# --- Document QA ---
+
+class SourceCreate(BaseModel):
+    filename: str = Field(..., min_length=1, max_length=255)
+    content_type: Literal["text/plain", "text/markdown", "application/pdf"]
+    content: str = Field(..., min_length=1, max_length=500_000)
+
+
+class SourceOut(BaseModel):
+    id: str
+    filename: str
+    content_type: str
+    chunk_count: int
+    created_at: datetime
+
+
+class QuestionRequest(BaseModel):
+    question: str = Field(..., min_length=1, max_length=4_000)
+    source_ids: list[str] | None = None
+    top_k: int = Field(default=5, ge=1, le=20)
+
+
+class CitationOut(BaseModel):
+    source_id: str
+    source_filename: str
+    chunk_position: int
+    chunk_text: str
+
+
+class FailureCaseOut(BaseModel):
+    question: str
+    expected_answer: str
+    actual_answer: str
+    retrieval_issue: str
+
+
+class QuestionResponse(BaseModel):
+    question: str
+    answer: str
+    citations: list[CitationOut]
+    latency_ms: int
+    failure_case: FailureCaseOut | None = None
