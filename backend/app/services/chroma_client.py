@@ -101,9 +101,9 @@ def delete_source_chunks(source_id: str) -> None:
 
 def reset_for_tests() -> None:
     global _CLIENT
-    client = _get_chroma_client()
-    try:
-        client.delete_collection(_COLLECTION_NAME)
-    except Exception:
-        pass
-    _CLIENT = None
+    if _CLIENT is not None:
+        try:
+            _CLIENT.delete_collection(_COLLECTION_NAME)
+        except Exception:
+            pass
+        _CLIENT = None
