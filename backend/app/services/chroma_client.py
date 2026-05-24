@@ -11,10 +11,11 @@ from app.config import get_settings
 
 _COLLECTION_NAME = "documents"
 _CLIENT: ClientAPI | None = None
+_EMBEDDING_FN: "embedding_functions.OpenAIEmbeddingFunction | None" = None
 
 
 def _get_chroma_client() -> ClientAPI:
-    global _CLIENT
+    global _CLIENT, _EMBEDDING_FN
     if _CLIENT is not None:
         return _CLIENT
 
@@ -24,7 +25,7 @@ def _get_chroma_client() -> ClientAPI:
     )
     os.makedirs(persist_dir, exist_ok=True)
 
-    embedding_fn = embedding_functions.OpenAIEmbeddingFunction(
+    _EMBEDDING_FN = embedding_functions.OpenAIEmbeddingFunction(
         api_key=settings.openai_api_key,
         api_base=settings.openai_base_url,
         model_name="text-embedding-3-small",
@@ -33,14 +34,22 @@ def _get_chroma_client() -> ClientAPI:
     _CLIENT = chromadb.PersistentClient(path=persist_dir)
     _CLIENT.get_or_create_collection(
         name=_COLLECTION_NAME,
-        embedding_function=embedding_fn,
+        embedding_function=_EMBEDDING_FN,
         metadata={"hnsw:space": "cosine"},
     )
     return _CLIENT
 
 
 def _collection():
-    return _get_chroma_client().get_collection(_COLLECTION_NAME)
+    client = _get_chroma_client()
+    try:
+        return client.get_collection(_COLLECTION_NAME, embedding_function=_EMBEDDING_FN)
+    except Exception:
+        return _CLIENT.get_or_create_collection(
+            name=_COLLECTION_NAME,
+            embedding_function=_EMBEDDING_FN,
+            metadata={"hnsw:space": "cosine"},
+        )
 
 
 def add_chunks(chunks: list[dict[str, Any]]) -> list[str]:
@@ -55,6 +64,8 @@ def add_chunks(chunks: list[dict[str, Any]]) -> list[str]:
                 "source_id": c["source_id"],
                 "filename": c["filename"],
                 "chunk_position": c["chunk_position"],
+                "content_type": c.get("content_type", "text/plain"),
+                "created_at": c.get("created_at", ""),
             }
             for c in chunks
         ],
@@ -99,11 +110,23 @@ def delete_source_chunks(source_id: str) -> None:
         col.delete(ids=results["ids"])
 
 
+def get_all_source_ids() -> list[str]:
+    col = _collection()
+    try:
+        all_data = col.get(include=["metadatas"])
+        if all_data["metadatas"]:
+            return list({m["source_id"] for m in all_data["metadatas"] if m and "source_id" in m})
+    except Exception:
+        pass
+    return []
+
+
 def reset_for_tests() -> None:
-    global _CLIENT
+    global _CLIENT, _EMBEDDING_FN
     if _CLIENT is not None:
         try:
             _CLIENT.delete_collection(_COLLECTION_NAME)
         except Exception:
             pass
         _CLIENT = None
+        _EMBEDDING_FN = None

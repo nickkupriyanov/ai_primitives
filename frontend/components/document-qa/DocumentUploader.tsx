@@ -32,7 +32,17 @@ export function DocumentUploader({ onUpload, disabled }: DocumentUploaderProps) 
 
     setUploading(true);
     try {
-      const content = await file.text();
+      let content: string;
+      if (contentType === "application/pdf") {
+        content = await new Promise<string>((resolve, reject) => {
+          const reader = new FileReader();
+          reader.onload = () => resolve((reader.result as string).split(",")[1]);
+          reader.onerror = () => reject(new Error("Failed to read PDF file"));
+          reader.readAsDataURL(file);
+        });
+      } else {
+        content = await file.text();
+      }
       await onUpload(file.name, content, contentType);
     } finally {
       setUploading(false);

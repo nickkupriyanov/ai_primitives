@@ -71,11 +71,12 @@ export async function uploadDocument(
 export async function queryDocument(
   question: string,
   topK: number = 5,
+  sourceIds?: string[],
 ): Promise<QuestionResponse> {
   const res = await fetch(`${BACKEND_URL}/documents/query`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ question, top_k: topK }),
+    body: JSON.stringify({ question, top_k: topK, source_ids: sourceIds }),
   });
 
   if (!res.ok) {

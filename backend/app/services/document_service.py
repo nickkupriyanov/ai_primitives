@@ -1,3 +1,4 @@
+import base64
 import io
 import json
 import os
@@ -71,17 +72,61 @@ def _chunk_markdown(text: str) -> list[str]:
     return all_chunks
 
 
-def _extract_pdf_text(content: bytes) -> str:
-    reader = PdfReader(io.BytesIO(content))
-    return "\n\n".join(page.extract_text() or "" for page in reader.pages)
+def _extract_pdf_text(content: str) -> str:
+    try:
+        pdf_bytes = base64.b64decode(content)
+        reader = PdfReader(io.BytesIO(pdf_bytes))
+        return "\n\n".join(page.extract_text() or "" for page in reader.pages)
+    except Exception:
+        raise AppError(
+            "PDF_PARSE_ERROR",
+            "Failed to parse PDF file. Ensure the file is a valid PDF.",
+            422,
+        )
 
 
 _sources: dict[str, dict[str, Any]] = {}
+_restored = False
+
+
+def _restore_sources() -> None:
+    global _sources, _restored
+    if _restored:
+        return
+    _restored = True
+    try:
+        from app.services.chroma_client import _get_chroma_client, _COLLECTION_NAME
+        client = _get_chroma_client()
+        col = client.get_collection(_COLLECTION_NAME)
+        all_data = col.get(include=["metadatas"])
+        if not all_data["metadatas"] or not all_data["ids"]:
+            return
+        seen: set[str] = set()
+        for i, meta in enumerate(all_data["metadatas"]):
+            if not meta or "source_id" not in meta:
+                continue
+            sid = meta["source_id"]
+            if sid in seen:
+                _sources[sid]["chunk_count"] += 1
+                continue
+            seen.add(sid)
+            _sources[sid] = {
+                "id": sid,
+                "filename": meta.get("filename", "unknown"),
+                "content_type": meta.get("content_type", "text/plain"),
+                "chunk_count": 1,
+                "created_at": datetime.fromisoformat(
+                    meta.get("created_at", datetime.now(timezone.utc).isoformat())
+                ),
+            }
+    except Exception:
+        pass
 
 
 class DocumentService:
     def __init__(self) -> None:
         self._llm_service: LLMService | None = None
+        _restore_sources()
 
     def _get_llm(self) -> LLMService:
         if self._llm_service is None:
@@ -93,15 +138,15 @@ class DocumentService:
         content = payload.content
 
         if payload.content_type == "application/pdf":
-            try:
-                content = _extract_pdf_text(content.encode("latin-1"))
-            except Exception:
-                pass
+            content = _extract_pdf_text(payload.content)
 
         if payload.content_type == "text/markdown":
             chunks = _chunk_markdown(content)
         else:
             chunks = _chunk_text(content)
+
+        now = datetime.now(timezone.utc)
+        now_iso = now.isoformat()
 
         chunk_records = [
             {
@@ -109,13 +154,14 @@ class DocumentService:
                 "filename": payload.filename,
                 "chunk_position": i,
                 "text": chunk,
+                "content_type": payload.content_type,
+                "created_at": now_iso,
             }
             for i, chunk in enumerate(chunks)
         ]
 
         add_chunks(chunk_records)
 
-        now = datetime.now(timezone.utc)
         _sources[source_id] = {
             "id": source_id,
             "filename": payload.filename,
@@ -278,8 +324,9 @@ def _list_scenarios() -> list[str]:
 
 
 def reset_for_tests() -> None:
-    global _sources
+    global _sources, _restored
     _sources.clear()
+    _restored = False
     clear_failure_cache()
 
 

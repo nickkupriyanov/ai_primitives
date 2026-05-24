@@ -1,9 +1,10 @@
 "use client";
 
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect } from "react";
 import {
   uploadDocument,
   queryDocument,
+  getSources,
   deleteSource,
   loadDemoScenario,
   type SourceOut,
@@ -29,6 +30,12 @@ export default function DocumentQAPage() {
   const [loadedScenario, setLoadedScenario] = useState<string | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
 
+  useEffect(() => {
+    queueMicrotask(() => {
+      getSources().then(setSources).catch(() => {});
+    });
+  }, []);
+
   const handleLoadScenario = useCallback(async (scenarioId: string) => {
     setStatus("loading");
     setError(null);
@@ -52,14 +59,15 @@ export default function DocumentQAPage() {
     setResponse(null);
 
     try {
-      const result = await queryDocument(question);
+      const sourceIds = sources.length > 0 ? sources.map((s) => s.id) : undefined;
+      const result = await queryDocument(question, 5, sourceIds);
       setResponse(result);
       setStatus("success");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to query documents");
       setStatus("error");
     }
-  }, []);
+  }, [sources]);
 
   const handleUpload = useCallback(async (filename: string, content: string, contentType: string) => {
     setStatus("loading");
