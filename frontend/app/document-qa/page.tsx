@@ -1,10 +1,9 @@
 "use client";
 
-import { useState, useCallback, useEffect } from "react";
+import { useState, useCallback } from "react";
 import {
   uploadDocument,
   queryDocument,
-  getSources,
   deleteSource,
   loadDemoScenario,
   type SourceOut,
@@ -24,26 +23,25 @@ type Tab = "demo" | "upload";
 export default function DocumentQAPage() {
   const [activeTab, setActiveTab] = useState<Tab>("demo");
   const [customSources, setCustomSources] = useState<SourceOut[]>([]);
+  const [demoSourcesByScenario, setDemoSourcesByScenario] = useState<Record<string, SourceOut[]>>({});
   const [status, setStatus] = useState<DocumentQAStatus>("idle");
   const [error, setError] = useState<string | null>(null);
   const [response, setResponse] = useState<QuestionResponse | null>(null);
   const [loadedScenario, setLoadedScenario] = useState<string | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
 
-  useEffect(() => {
-    queueMicrotask(() => {
-      getSources().then(setCustomSources).catch(() => {});
-    });
-  }, []);
-
   const handleLoadScenario = useCallback(async (scenarioId: string) => {
     setStatus("loading");
     setError(null);
     setResponse(null);
-    setLoadedScenario(scenarioId);
 
     try {
-      await loadDemoScenario(scenarioId);
+      const demoSources = await loadDemoScenario(scenarioId);
+      setDemoSourcesByScenario((prev) => ({
+        ...prev,
+        [scenarioId]: demoSources,
+      }));
+      setLoadedScenario(scenarioId);
       setStatus("success");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to load scenario");
@@ -58,9 +56,22 @@ export default function DocumentQAPage() {
     setResponse(null);
 
     try {
-      const sourceIds = activeTab === "upload" && customSources.length > 0
-        ? customSources.map((s) => s.id)
-        : undefined;
+      const activeDemoSources = loadedScenario
+        ? demoSourcesByScenario[loadedScenario] ?? []
+        : [];
+      const sourceIds =
+        activeTab === "upload"
+          ? customSources.map((s) => s.id)
+          : activeDemoSources.map((s) => s.id);
+
+      if (sourceIds.length === 0) {
+        throw new Error(
+          activeTab === "upload"
+            ? "Upload documents to ask questions."
+            : "Load a demo scenario before asking questions.",
+        );
+      }
+
       const result = await queryDocument(question, 5, sourceIds);
       setResponse(result);
       setStatus("success");
@@ -68,7 +79,7 @@ export default function DocumentQAPage() {
       setError(err instanceof Error ? err.message : "Failed to query documents");
       setStatus("error");
     }
-  }, [customSources, activeTab]);
+  }, [activeTab, customSources, demoSourcesByScenario, loadedScenario]);
 
   const handleUpload = useCallback(async (filename: string, content: string, contentType: string) => {
     setStatus("loading");
