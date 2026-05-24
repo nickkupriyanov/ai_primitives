@@ -44,6 +44,9 @@ export default function RootLayout({
               <Link href="/tool-playground" className="text-muted-foreground hover:text-foreground transition-colors">
                 Tool Playground
               </Link>
+              <Link href="/document-qa" className="text-muted-foreground hover:text-foreground transition-colors">
+                Document QA
+              </Link>
             </nav>
           </div>
         </header>
